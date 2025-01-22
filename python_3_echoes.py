@@ -3,7 +3,6 @@ import numpy as np
 import pydicom as pdcm
 from skimage import transform as st
 from skimage import restoration as sr
-import poisson as ps
 import matplotlib.pyplot as plt
 
 def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=None):
@@ -78,8 +77,13 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
         plt.title(f'Echo {iecho + 1} Phase (Mid-Slice)')
         plt.show()
     
-    # Compute the field map
-    field_map = (slope * field_map + intercept) / slope / fm_range / dTE1
+    # Compute the field map using 3 echoes
+    # Phase differences between echoes
+    phase_diff1 = np.angle(np.exp(1j * (field_map[:, :, :, 1] - field_map[:, :, :, 0])))
+    phase_diff2 = np.angle(np.exp(1j * (field_map[:, :, :, 2] - field_map[:, :, :, 1])))
+    
+    # Field map calculation (weighted average of phase differences)
+    field_map = (phase_diff1 / dTE1 + phase_diff2 / dTE2) / (1 / dTE1 + 1 / dTE2)
     
     # Phase unwrapping (optional)
     convert = (dTE1 * 2 * np.pi)
@@ -88,7 +92,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
         
         # Extract the mid-slice along the third dimension (slices)
         mid_slice_index = field_map.shape[2] // 2  # Mid-slice index
-        field_map_mid_slice = field_map[:, :, mid_slice_index, :]  # Shape: (64, 64, 3)
+        field_map_mid_slice = field_map[:, :, mid_slice_index]  # Shape: (64, 64)
         
         # Apply phase unwrapping to the mid-slice
         field_map_mid_slice = sr.unwrap_phase(field_map_mid_slice * convert) / convert
@@ -104,7 +108,6 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
         reference = st.resize(reference, field_map.shape)
         field_map = ps.poisson_unwrap_gpu(field_map * convert, reference, kmax=10) / convert
     
-    
     # Resize field map
     field_map_mid_slice = st.resize(field_map_mid_slice.astype(np.float32), (Nx, Ny, Nz))
     
@@ -115,7 +118,7 @@ Nx = 256
 Ny = 256
 Nz = 64
 
-#  Load and process the field map
+# Load and process the field map
 field_map = load_field_map_from_dicom('/volatile/home/st281428/field_map/B0/_1/P', Nx, Ny, Nz, unwrap="old", reference=None)
 print("Field Map Shape:", field_map.shape)
 
