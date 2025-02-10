@@ -133,7 +133,8 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     
 
     # Apply the mask to the field map
-    field_map = field_map * mask  # in matlab we apply the mask later
+    mask_expanded = np.repeat(mask, nechos, axis=-1)
+    field_map = field_map * mask_expanded  # in matlab we apply the mask later
     # Calculate phase mapping using MATLAB-style approach
     if unwrap=="2D":
         D = (field_map[:,:,:,1] - field_map[:,:,:,0])  # Phase difference in radians
