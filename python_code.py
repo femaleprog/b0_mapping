@@ -22,16 +22,10 @@ def load_magnitude_from_dicom(folder_path):
     
     # group files by echo 
     nechos = 3
-    echo_groups = [[] for _ in range(nechos)]
-    for i, dcm in enumerate(fm_dcms):
-        echo_groups[i % nechos].append(dcm)
-    
-    # Load and reshape the data
-    magnitude = []
-    for iecho in range(nechos):
-        echo_data = np.array([pdcm.dcmread(dcm).pixel_array for dcm in echo_groups[iecho]])
-        magnitude.append(np.stack(echo_data, axis=-1))
-    magnitude = np.stack(magnitude, axis=-1).astype(np.float32)
+    echo_data = np.array([pdcm.dcmread(dcm).pixel_array for dcm in fm_dcms]) 
+    magnitude = echo_data.reshape(nechos,len(echo_data)//nechos,*echo_data[0].shape)
+    magnitude = np.moveaxis(magnitude, 0, -1)
+    magnitude = np.moveaxis(magnitude, 0, -2)
     return magnitude
     
 def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=None):
@@ -227,27 +221,27 @@ print("B0 Map Shape:", B0map.shape)
 slice_index = B0map.shape[2] // 2
 B0map_slice = B0map[:, :, slice_index]
 
+# Compute the min and max values across the entire B0map
+vmin = np.min(B0map)
+vmax = np.max(B0map)
+
 fig, axes = plt.subplots(1, 3, figsize=(12, 5))
+
+slice_index = B0map.shape[2] // 2  # Middle slice
 
 # Axial View
 ax = axes[0]
-ax.imshow(B0map[:, :, slice_index], origin='lower')
+ax.imshow(B0map[:, :, slice_index], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
 ax.set_title('Axial')
 
 # Coronal View
 ax = axes[1]
-ax.imshow(B0map[:, slice_index, :], origin='lower')
+ax.imshow(B0map[:, slice_index, :], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
 ax.set_title('Coronal')
 
 # Sagittal View
 ax = axes[2]
-ax.imshow(B0map[slice_index, :, :], origin='lower')
+ax.imshow(B0map[slice_index, :, :], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
 ax.set_title('Sagittal')
 
 plt.show()
-# Plot the slice
-#plt.figure(figsize=(10, 8))
-#plt.imshow(B0map_slice, cmap='viridis') # vmin=-300, vmax=300
-#plt.colorbar(label='B0 Field (Hz)')
-#plt.title(f"B0 Field Map (Mid-Slice, z = {slice_index})")
-#plt.show()
