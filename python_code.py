@@ -6,7 +6,7 @@ from skimage import restoration as sr
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter, binary_opening 
 import scipy
-
+import cv2
 
 
 
@@ -84,25 +84,31 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
 
     # Visualize mid-slices of phase data for each echo phase : 0 - 4096
     mid_slice = DimS // 2  # Mid-slice index
+
+    '''
     for iecho in range(nechos):
         plt.figure()
         plt.imshow(field_map[:, :, mid_slice, iecho], cmap='gray')
         plt.colorbar()
         plt.title(f'Echo {iecho + 1} Phase (Mid-Slice)')
         plt.show()
+    '''
     # Convert field map to phase data
     #field_map = (slope * field_map + intercept) / slope / fm_range
+
     
     # Convert the phase values from 0-4096 to -pi to pi
     field_map = (field_map / 4096) * (2 * np.pi) - np.pi
     
     # Visualize mid-slices of phase data for each echo phase : -pi - pi
+    '''
     for iecho in range(nechos):
         plt.figure()
         plt.imshow(field_map[:, :, mid_slice, iecho], cmap='gray')
         plt.colorbar()
         plt.title(f'Echo {iecho + 1} Phase (Mid-Slice)')
         plt.show()
+    '''
     # Initialize phase calculation arrays
     DimR, DimP, DimS, _ = field_map.shape
     B0map = np.zeros((DimR, DimP, DimS))
@@ -175,14 +181,26 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     B0map = st.resize(B0map.astype(np.float32), (Nx, Ny, Nz))
     print("B0 Map values:", B0map)
 
-    # compute difference 
+
+    # Compute difference 
+
     # Load MATLAB B0map
     matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
     B0map_matlab = matlab_data['B0map']  # Extract variable
     B0map_matlab_slice = B0map_matlab[:, :, 22]
     B0map_python_slice = B0map[:, :, 22]  # Select same slice
-    B0map_diff = B0map_matlab_slice - B0map_python_slice
-    print(B0map_matlab_slice.shape, B0map_python_slice.shape)
+
+    
+    # resize the image using zoom 
+    B0map_python_resized = cv2.resize(B0map_python_slice, (64, 64), interpolation=cv2.INTER_CUBIC)
+    B0map_diff = B0map_matlab_slice - B0map_python_resized
+
+    # compute the MSE
+    mse = np.mean((B0map_matlab_slice - B0map_python_resized) ** 2)
+
+    print("MSE:", mse)
+
+    # Visualize the difference
     plt.figure(figsize=(6, 5))
     plt.imshow(B0map_diff, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
     plt.colorbar(label='Difference (Hz)')
