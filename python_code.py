@@ -5,6 +5,11 @@ from skimage import transform as st
 from skimage import restoration as sr
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter, binary_opening 
+import scipy
+
+
+
+
 
 def load_magnitude_from_dicom(folder_path):
     # Read and sort DICOM files 
@@ -41,19 +46,12 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     
     # Group files by echo
     nechos = 3  # Assuming 3 echoes 
-    echo_groups = [[] for _ in range(nechos)]
-    for i, dcm in enumerate(fm_dcms):
-        echo_groups[i % nechos].append(dcm)
-    
     # Load and reshape the data
-    field_map = []
-    for iecho in range(nechos):
-        echo_data = np.array([pdcm.dcmread(dcm).pixel_array for dcm in echo_groups[iecho]]) 
-        field_map.append(np.stack(echo_data, axis=-1))
-    
-    # Stack echoes along the last dimension, and converted to float32
-    field_map = np.stack(field_map, axis=-1).astype(np.float32)
-    
+    echo_data = np.array([pdcm.dcmread(dcm).pixel_array for dcm in fm_dcms]) 
+    field_map = echo_data.reshape(nechos,len(echo_data)//nechos,*echo_data[0].shape)
+    field_map = np.moveaxis(field_map, 0, -1)
+    field_map = np.moveaxis(field_map, 0, -2)
+
     # Get metadata from the first DICOM file
     fm_data = pdcm.dcmread(fm_dcms[0])
 
@@ -124,16 +122,20 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     # Adaptive threshold based on percentile
     threshold = np.percentile(mean_amplitude, 62)  # Adjust this percentile if necessary
     mask = mean_amplitude > threshold
-
     mask = np.expand_dims(mask, axis=-1)  # Ensure mask matches field_map 
+
+    
+
     # Apply the mask to the field map
-    field_map = field_map * mask 
+    field_map = field_map * mask  # in matlab we apply the mask later
     # Calculate phase mapping using MATLAB-style approach
     if unwrap=="2D":
-        D = (field_map[:,:,:,1] - field_map[:,:,:,0]) / (2 * np.pi) # Phase difference from radians to turns 
-        Dneg = D < -0.5
-        Dpos = D >= 0.5
-        unwrapped = D + Dneg - Dpos
+        D = (field_map[:,:,:,1] - field_map[:,:,:,0])  # Phase difference in radians
+        # In matlab here : Unwrapped = SEGUE(Inputs);
+        D_turns = D / ( 2 * np.pi )
+        Dneg = D_turns < -0.5
+        Dpos = D_turns >= 0.5
+        unwrapped = D_turns + Dneg - Dpos
         B0map = unwrapped / dTE1
     
     elif unwrap=="3D":
@@ -171,7 +173,26 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     
     # Resize B0 map
     B0map = st.resize(B0map.astype(np.float32), (Nx, Ny, Nz))
-    
+    print("B0 Map values:", B0map)
+
+    # compute difference 
+    # Load MATLAB B0map
+    matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
+    B0map_matlab = matlab_data['B0map']  # Extract variable
+    B0map_matlab_slice = B0map_matlab[:, :, 22]
+    B0map_python_slice = B0map[:, :, 22]  # Select same slice
+    B0map_diff = B0map_matlab_slice - B0map_python_slice
+    print(B0map_matlab_slice.shape, B0map_python_slice.shape)
+    plt.figure(figsize=(6, 5))
+    plt.imshow(B0map_diff, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
+    plt.colorbar(label='Difference (Hz)')
+    plt.title("Difference: MATLAB vs Python B0map", fontsize=12, fontweight="bold")
+    plt.axis('equal')
+    plt.axis('tight')
+    plt.show()
+
+
+
     return B0map
 
 # Parameters
@@ -187,9 +208,27 @@ print("B0 Map Shape:", B0map.shape)
 slice_index = B0map.shape[2] // 2
 B0map_slice = B0map[:, :, slice_index]
 
-# Plot the slice
-plt.figure(figsize=(10, 8))
-plt.imshow(B0map_slice, cmap='viridis') # vmin=-300, vmax=300
-plt.colorbar(label='B0 Field (Hz)')
-plt.title(f"B0 Field Map (Mid-Slice, z = {slice_index})")
+fig, axes = plt.subplots(1, 3, figsize=(12, 5))
+
+# Axial View
+ax = axes[0]
+ax.imshow(B0map[:, :, slice_index], origin='lower')
+ax.set_title('Axial')
+
+# Coronal View
+ax = axes[1]
+ax.imshow(B0map[:, slice_index, :], origin='lower')
+ax.set_title('Coronal')
+
+# Sagittal View
+ax = axes[2]
+ax.imshow(B0map[slice_index, :, :], origin='lower')
+ax.set_title('Sagittal')
+
 plt.show()
+# Plot the slice
+#plt.figure(figsize=(10, 8))
+#plt.imshow(B0map_slice, cmap='viridis') # vmin=-300, vmax=300
+#plt.colorbar(label='B0 Field (Hz)')
+#plt.title(f"B0 Field Map (Mid-Slice, z = {slice_index})")
+#plt.show()
