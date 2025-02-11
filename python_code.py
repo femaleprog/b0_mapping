@@ -173,38 +173,70 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
         raise ValueError(f"Unexpected unwrap method: {unwrap}")
     
     # Resize B0 map
-    B0map = st.resize(B0map.astype(np.float32), (Nx, Ny, Nz))
+    #B0map = st.resize(B0map.astype(np.float32), (Nx, Ny, Nz))
     print("B0 Map values:", B0map)
 
-
+    slice_index = 22
     # Compute difference 
 
     # Load MATLAB B0map
     matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
     B0map_matlab = matlab_data['B0map']  # Extract variable
+
+    # Axial slice comparison
     B0map_matlab_slice = B0map_matlab[:, :, 22]
     B0map_python_slice = B0map[:, :, 22]  # Select same slice
-
-    
-    # resize the image using zoom 
-    B0map_python_resized = cv2.resize(B0map_python_slice, (64, 64), interpolation=cv2.INTER_CUBIC)
-    B0map_diff = B0map_matlab_slice - B0map_python_resized
+    B0map_diff_axial = B0map_matlab_slice - B0map_python_slice
 
     # compute the MSE
-    mse = np.mean((B0map_matlab_slice - B0map_python_resized) ** 2)
+    mse_axial = np.mean((B0map_matlab_slice - B0map_python_slice) ** 2)
+    print("MSE axial:", mse_axial)
+    
 
-    print("MSE:", mse)
+    # Coronal slice comparison
+    B0map_matlab_coronal = B0map_matlab[:, slice_index, :]  # MATLAB Coronal slice
+    B0map_python_coronal = B0map[:, slice_index, :]  # Python Coronal slice
+    B0map_diff_coronal = B0map_matlab_coronal - B0map_python_coronal
+    
+    # Compute MSE
+    mse_coronal = np.mean(B0map_diff_coronal ** 2)
+    print("Coronal MSE:", mse_coronal)
+    
+    # Sagittal slice comparison
+    B0map_matlab_sagittal = B0map_matlab[slice_index, :, :]  # MATLAB Sagittal slice
+    B0map_python_sagittal = B0map[slice_index, :, :]  # Python Sagittal slice
+    B0map_diff_sagittal = B0map_matlab_sagittal - B0map_python_sagittal
 
-    # Visualize the difference
+    # Compute MSE
+    mse_sagittal = np.mean(B0map_diff_sagittal ** 2)
+    print("Sagittal MSE:", mse_sagittal)
+
+    # Visualize the difference : Axial
     plt.figure(figsize=(6, 5))
-    plt.imshow(B0map_diff, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
+    plt.imshow(B0map_diff_axial, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
     plt.colorbar(label='Difference (Hz)')
-    plt.title("Difference: MATLAB vs Python B0map", fontsize=12, fontweight="bold")
+    plt.title("Difference- Axial: MATLAB vs Python B0map", fontsize=12, fontweight="bold")
+    plt.axis('equal')
+    plt.axis('tight')
+    plt.show()
+    
+    # Visualize the difference : Coronal
+    plt.figure(figsize=(6, 5))
+    plt.imshow(B0map_diff_coronal, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
+    plt.colorbar(label='Difference (Hz)')
+    plt.title("Difference- Coronal: MATLAB vs Python B0map", fontsize=12, fontweight="bold")
     plt.axis('equal')
     plt.axis('tight')
     plt.show()
 
-
+    # Visualize the difference : Sagittal
+    plt.figure(figsize=(6, 5))
+    plt.imshow(B0map_diff_sagittal, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
+    plt.colorbar(label='Difference (Hz)')
+    plt.title("Difference- Sagittal: MATLAB vs Python B0map", fontsize=12, fontweight="bold")
+    plt.axis('equal')
+    plt.axis('tight')
+    plt.show()
 
     return B0map
 
