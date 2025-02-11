@@ -182,7 +182,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
 
     # Load MATLAB B0map
     matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
-    B0map_matlab = matlab_data['B0map']  # Extract variable
+    inputs_matlab = matlab_data['B0map']  # Extract variable
 
     # Visualising the difference 
     
@@ -257,6 +257,50 @@ Nz = 64
 # Load and process the field map
 B0map = load_field_map_from_dicom('/volatile/home/st281428/field_map/B0/_1/P', Nx, Ny, Nz, unwrap="3D", reference=None)
 print("B0 Map Shape:", B0map.shape)
+
+# Debugging : Visualizing inputs.mat Input to SEGUE
+mat_inputs = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/inputs.mat')  
+Phase = mat_inputs['Phase']  # Extract variable 
+extracted_arrays = [Phase[i,0] for i in range(Phase.shape[0])]
+Phase = np.stack(extracted_arrays, axis=-1)
+
+slice_index = 22
+fig, axes = plt.subplots(1, 3, figsize=(14, 5), gridspec_kw={'width_ratios': [1, 1, 1]})
+vmin = np.min(Phase)
+vmax = np.max(Phase)
+norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+cmap = cm.get_cmap('viridis')
+
+# Axial View
+ax = axes[0]
+axial = Phase[:, :, slice_index]
+rot_axial=np.rot90(axial,2,(1,0))
+img1 = ax.imshow(rot_axial, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Axial')
+
+#   Sagittal View (Rotated)
+ax = axes[1]
+sagittal = Phase[:, slice_index, :]
+rot_sagittal=np.rot90(sagittal,1,(1,0))
+rot_sagittal = np.fliplr(rot_sagittal)
+img2 = ax.imshow(rot_sagittal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Sagittal')
+
+# Coronal View (Rotated)
+ax = axes[2]
+coronal = Phase[slice_index, :, :]
+rot_coronal = np.rot90(coronal, 1, (1, 0))
+rot_coronal = np.fliplr(rot_coronal)
+img3 = ax.imshow(rot_coronal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Coronal')
+
+# Adjust layout to avoid overlap
+plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
+
+# Create a colorbar in an external position
+cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+cbar.set_label("")
 
 # Visualizing a 2D slice of the B0 map
 slice_index = B0map.shape[2] // 2
