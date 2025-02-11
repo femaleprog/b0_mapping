@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter, binary_opening 
 import scipy
 import cv2
-
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 
 
@@ -183,6 +184,11 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
     B0map_matlab = matlab_data['B0map']  # Extract variable
 
+    # Visualising the difference 
+    
+    '''
+    
+    
     # Axial slice comparison
     B0map_matlab_slice = B0map_matlab[:, :, 22]
     B0map_python_slice = B0map[:, :, 22]  # Select same slice
@@ -196,6 +202,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     # Coronal slice comparison
     B0map_matlab_coronal = B0map_matlab[:, slice_index, :]  # MATLAB Coronal slice
     B0map_python_coronal = B0map[:, slice_index, :]  # Python Coronal slice
+    B0map_python_coronal_fixed = np.rot90(B0map_python_coronal,1, (0,1))  # Flip the Python slice
     B0map_diff_coronal = B0map_matlab_coronal - B0map_python_coronal
     
     # Compute MSE
@@ -205,12 +212,14 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     # Sagittal slice comparison
     B0map_matlab_sagittal = B0map_matlab[slice_index, :, :]  # MATLAB Sagittal slice
     B0map_python_sagittal = B0map[slice_index, :, :]  # Python Sagittal slice
+    B0map_python_coronal_fixed = np.rot90(B0map_python_coronal,1, (0,1))
     B0map_diff_sagittal = B0map_matlab_sagittal - B0map_python_sagittal
 
     # Compute MSE
     mse_sagittal = np.mean(B0map_diff_sagittal ** 2)
     print("Sagittal MSE:", mse_sagittal)
 
+    
     # Visualize the difference : Axial
     plt.figure(figsize=(6, 5))
     plt.imshow(B0map_diff_axial, cmap='bwr', vmin=-50, vmax=50)  # Blue-Red colormap for difference
@@ -237,7 +246,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     plt.axis('equal')
     plt.axis('tight')
     plt.show()
-
+    '''
     return B0map
 
 # Parameters
@@ -257,23 +266,78 @@ B0map_slice = B0map[:, :, slice_index]
 vmin = np.min(B0map)
 vmax = np.max(B0map)
 
-fig, axes = plt.subplots(1, 3, figsize=(12, 5))
+fig, axes = plt.subplots(1, 3, figsize=(14, 5), gridspec_kw={'width_ratios': [1, 1, 1]})
 
 slice_index = B0map.shape[2] // 2  # Middle slice
 
+# Define colormap and normalization for the colorbar
+norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+cmap = cm.get_cmap('viridis')
+
 # Axial View
 ax = axes[0]
-ax.imshow(B0map[:, :, slice_index], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
+axial = B0map[:, :, slice_index]
+rot_axial=np.rot90(axial,2,(1,0))
+img1 = ax.imshow(rot_axial, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
 ax.set_title('Axial')
 
-# Coronal View
+#   Sagittal View (Rotated)
 ax = axes[1]
-ax.imshow(B0map[:, slice_index, :], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
+sagittal = B0map[:, slice_index, :]
+rot_sagittal=np.rot90(sagittal,1,(1,0))
+rot_sagittal = np.fliplr(rot_sagittal)
+img2 = ax.imshow(rot_sagittal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Sagittal')
+
+# Coronal View (Rotated)
+ax = axes[2]
+coronal = B0map[slice_index, :, :]
+rot_coronal = np.rot90(coronal, 1, (1, 0))
+rot_coronal = np.fliplr(rot_coronal)
+img3 = ax.imshow(rot_coronal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
 ax.set_title('Coronal')
 
-# Sagittal View
-ax = axes[2]
-ax.imshow(B0map[slice_index, :, :], origin='lower', vmin=vmin, vmax=vmax, cmap='viridis')
+# Adjust layout to avoid overlap
+plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
+
+# Create a colorbar in an external position
+cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+cbar.set_label("B0 Field (Hz)")
+
+
+# Same plot but for delta B0 from Matlab
+matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
+B0map_matlab = matlab_data['B0map']  # Extract variable
+# Axial View
+ax = axes[0]
+axial = B0map_matlab[:, :, slice_index]
+rot_axial=np.rot90(axial,2,(1,0))
+img1 = ax.imshow(rot_axial, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Axial')
+
+#   Sagittal View (Rotated)
+ax = axes[1]
+sagittal = B0map_matlab[:, slice_index, :]
+rot_sagittal=np.rot90(sagittal,1,(1,0))
+rot_sagittal = np.fliplr(rot_sagittal)
+img2 = ax.imshow(rot_sagittal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
 ax.set_title('Sagittal')
+
+# Coronal View (Rotated)
+ax = axes[2]
+coronal = B0map_matlab[slice_index, :, :]
+rot_coronal = np.rot90(coronal, 1, (1, 0))
+rot_coronal = np.fliplr(rot_coronal)
+img3 = ax.imshow(rot_coronal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Coronal')
+
+# Adjust layout to avoid overlap
+plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
+
+# Create a colorbar in an external position
+cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+cbar.set_label("B0 Field (Hz)")
 
 plt.show()
