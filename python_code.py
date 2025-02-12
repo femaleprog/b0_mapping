@@ -9,7 +9,7 @@ import scipy
 import cv2
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
-
+import matplotlib as mpl
 
 
 def load_magnitude_from_dicom(folder_path):
@@ -263,13 +263,13 @@ mat_inputs = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/inputs.ma
 Phase = mat_inputs['Phase']  # Extract variable 
 extracted_arrays = [Phase[i,0] for i in range(Phase.shape[0])]
 Phase = np.stack(extracted_arrays, axis=-1)
-
+Phase = Phase[:,:,:,0]
 slice_index = 22
 fig, axes = plt.subplots(1, 3, figsize=(14, 5), gridspec_kw={'width_ratios': [1, 1, 1]})
 vmin = np.min(Phase)
 vmax = np.max(Phase)
 norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-cmap = cm.get_cmap('viridis')
+cmap = mpl.colormaps.get_cmap('viridis')
 
 # Axial View
 ax = axes[0]
@@ -301,7 +301,7 @@ plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
 cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
 cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
 cbar.set_label("")
-
+plt.show()
 # Visualizing a 2D slice of the B0 map
 slice_index = B0map.shape[2] // 2
 B0map_slice = B0map[:, :, slice_index]
