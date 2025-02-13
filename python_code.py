@@ -131,6 +131,9 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     mask_expanded = np.repeat(mask, nechos, axis=-1)
     field_map = field_map * mask_expanded  # in matlab we apply the mask later
     # Calculate phase mapping using MATLAB-style approach
+    Diff = (field_map[:,:,:,1] - field_map[:,:,:,0])
+    Dunwrapped = sr.unwrap_phase(Diff)
+
     if unwrap=="2D":
         D = (field_map[:,:,:,1] - field_map[:,:,:,0])  # Phase difference in radians
         # In matlab here : Unwrapped = SEGUE(Inputs);
@@ -149,7 +152,11 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
         D = [field_map[:,:,:,i] / (2 * np.pi) for i in range(nechos)]
         
         # Phase difference calculations
-        D1 = D[1] - D[0]
+        D1 = Dunwrapped/2/np.pi
+        D[0] = field_map[:,:,:,0]/2/np.pi
+        D[1] = D[0] + D1
+        D[2] = field_map[:,:,:,2]/2/np.pi 
+
         D1neg = (D1 < -0.5)
         D1pos = (D1 >= 0.5)
         D1 = D1 + D1neg - D1pos
@@ -180,9 +187,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, reference=N
     slice_index = 22
     # Compute difference 
 
-    # Load MATLAB B0map
-    matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
-    inputs_matlab = matlab_data['B0map']  # Extract variable
+    
 
     # Visualising the difference 
     
@@ -254,10 +259,55 @@ Nx = 256
 Ny = 256
 Nz = 64
 
+'''
+# Load MATLAB B0map
+matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map_.mat')  
+B0map_without_SEGUE = matlab_data['B0map']  # Extract variable
+
+slice_index = 22
+fig, axes = plt.subplots(1, 3, figsize=(14, 5), gridspec_kw={'width_ratios': [1, 1, 1]})
+vmin = np.min(B0map_without_SEGUE)
+vmax = np.max(B0map_without_SEGUE)
+norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+cmap = mpl.colormaps.get_cmap('viridis')
+
+# Axial View
+ax = axes[0]
+axial = B0map_without_SEGUE[:, :, slice_index]
+rot_axial=np.rot90(axial,2,(1,0))
+img1 = ax.imshow(rot_axial, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Axial')
+
+#   Sagittal View (Rotated)
+ax = axes[1]
+sagittal = B0map_without_SEGUE[:, slice_index, :]
+rot_sagittal=np.rot90(sagittal,1,(1,0))
+rot_sagittal = np.fliplr(rot_sagittal)
+img2 = ax.imshow(rot_sagittal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Sagittal')
+
+# Coronal View (Rotated)
+ax = axes[2]
+coronal = B0map_without_SEGUE[slice_index, :, :]
+rot_coronal = np.rot90(coronal, 1, (1, 0))
+rot_coronal = np.fliplr(rot_coronal)
+img3 = ax.imshow(rot_coronal, origin='lower', vmin=vmin, vmax=vmax, cmap=cmap)
+ax.set_title('Coronal')
+
+# Adjust layout to avoid overlap
+plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
+
+# Create a colorbar in an external position
+cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+cbar.set_label("B0map in Matlab without SEGUE")
+plt.show()
+'''
 # Load and process the field map
 B0map = load_field_map_from_dicom('/volatile/home/st281428/field_map/B0/_1/P', Nx, Ny, Nz, unwrap="3D", reference=None)
 print("B0 Map Shape:", B0map.shape)
 
+'''
 # Debugging : Visualizing inputs.mat Input to SEGUE
 mat_inputs = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/inputs.mat')  
 Phase = mat_inputs['Phase']  # Extract variable 
@@ -302,6 +352,8 @@ cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
 cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
 cbar.set_label("")
 plt.show()
+
+'''
 # Visualizing a 2D slice of the B0 map
 slice_index = B0map.shape[2] // 2
 B0map_slice = B0map[:, :, slice_index]
@@ -348,8 +400,10 @@ plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
 cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
 cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
 cbar.set_label("B0 Field (Hz)")
+plt.title('Delta B0map in Hz')
+plt.show()
 
-
+'''
 # Same plot but for delta B0 from Matlab
 matlab_data = scipy.io.loadmat('/volatile/home/st281428/field_map/B0/_1/B0map.mat')  
 B0map_matlab = matlab_data['B0map']  # Extract variable
@@ -383,5 +437,6 @@ plt.subplots_adjust(right=0.85)  # Shrink figure width so colorbar fits
 cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
 cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
 cbar.set_label("B0 Field (Hz)")
-
+plt.title('')
 plt.show()
+'''
