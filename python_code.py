@@ -10,8 +10,10 @@ import cv2
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import matplotlib as mpl
-from visualize_b0map import view_B0map
+from visualize_b0map import view_B0map, visualize_map
 from calculate_mse import compute_mse
+from outlier_detection_python import outlier_detection_fieldmap
+from scipy import ndimage
 
 
 def load_magnitude_from_dicom(folder_path):
@@ -98,6 +100,7 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, Mask="Pytho
 
     # Initialize phase calculation arrays
     DimR, DimP, DimS, _ = field_map.shape
+    mask = []
     B0map = np.zeros((DimR, DimP, DimS))
     if Mask == "Matlab":
         mat_data = scipy.io.loadmat(
@@ -121,13 +124,17 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, Mask="Pytho
         # Adjust this percentile if necessary
         threshold = np.percentile(mean_amplitude, 62)
         mask = mean_amplitude > threshold
-
+    mask0 = mask  # Will be used in outlier detection
     mask = np.expand_dims(mask, axis=-1)  # Ensure mask matches field_map
     mask_expanded = np.repeat(mask, nechos, axis=-1)
     field_map = field_map * mask_expanded
     # Calculate phase mapping using MATLAB-style approach
+    Diff2 = sr.unwrap_phase(field_map[..., 1]) - \
+        sr.unwrap_phase(field_map[..., 0])
     Diff = (field_map[:, :, :, 1] - field_map[:, :, :, 0])
-    Dunwrapped = Diff
+    Dunwrapped = sr.unwrap_phase(Diff)
+    Dunwrappeddd2 = Diff2
+
     Dunwrapped = sr.unwrap_phase(Diff)
 
     if unwrap == "2D":
@@ -147,7 +154,6 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, Mask="Pytho
 
         # Initialize D as a list of phase arrays
         D = [None] * nechos
-
         # Phase difference calculations
         D1 = Dunwrapped/2/np.pi
         D[0] = field_map[:, :, :, 0]/2/np.pi
@@ -169,15 +175,16 @@ def load_field_map_from_dicom(folder_path, Nx, Ny, Nz, unwrap=False, Mask="Pytho
     else:
         raise ValueError(f"Unexpected unwrap method: {unwrap}")
 
-    # Resize B0 map
-    # B0map = st.resize(B0map.astype(np.float32), (Nx, Ny, Nz))
-    print("B0 Map values:", B0map)
-
-    slice_index = 22
-    # Compute difference
-
-    # Visualising the difference
-
+    B0_vect = B0map[mask0.astype(bool)].ravel()
+    neighbourhood = [3, 3, 3]
+    threshold = 8
+    mask_clean = mask0.ravel()
+    # outliers, B0_clean_vect = outlier_detection_fieldmap( \
+    #    mask0, B0_vect, neighbourhood, threshold, mask_clean)
+    outliers, B0_clean = outlier_detection_fieldmap(
+        B0map, neighbourhood, threshold)
+    view_B0map(B0map, slice_index=22)
+    view_B0map(B0_clean, slice_index=22)
     return B0map
 
 
@@ -192,9 +199,3 @@ B0map = load_field_map_from_dicom(
     '/volatile/home/st281428/field_map/B0/_1/P', Nx, Ny, Nz, unwrap="3D", Mask="Matlab", reference=None)
 
 view_B0map(B0map, slice_index=22)
-
-# Load B0map from MATLAB
-matlab_data = scipy.io.loadmat('B0/_1/B0map_echos_masked.mat')
-B0map_matlab = matlab_data['B0map']
-compute_mse(B0map_matlab, B0map)
-# view_B0map(B0map_matlab-B0map, slice_index=22)

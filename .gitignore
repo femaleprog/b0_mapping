@@ -13,3 +13,6 @@ pipeline_env/
 # Ignore IDE files
 .vscode/
 .idea/
+
+# tests
+tests/
