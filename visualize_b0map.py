@@ -4,7 +4,7 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 
-def view_B0map(B0map, slice_index=None):
+def view_B0map(B0map, slice_index=None, subtitle=None):
     """
     Function to visualize B0map in three views: Axial, Sagittal, and Coronal.
 
@@ -61,7 +61,7 @@ def view_B0map(B0map, slice_index=None):
     plt.show()
 
 
-def visualize_map(B0map, slice_index=None, vmin=-100, vmax=100):
+def visualize_map(B0map, slice_index=None, vmin=-100, vmax=100, subtitle=None):
     """
     Function to visualize B0map in three views: Axial, Sagittal, and Coronal, with fixed scaling.
 
@@ -112,5 +112,5 @@ def visualize_map(B0map, slice_index=None, vmin=-100, vmax=100):
                  cax=cbar_ax).set_label("B0 Field (Hz)")
 
     # Title for the entire figure
-    plt.suptitle('Delta B0map in Hz (Fixed Scale)')
+    plt.suptitle(subtitle)
     plt.show()
