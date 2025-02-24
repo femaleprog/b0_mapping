@@ -70,6 +70,7 @@ def visualize_map(B0map, slice_index=None, vmin=-100, vmax=100, subtitle=None):
         slice_index (int, optional): Index of the slice to display. Defaults to the middle slice.
         vmin (float): Minimum value for colormap normalization (fixed scale for comparison).
         vmax (float): Maximum value for colormap normalization (fixed scale for comparison).
+        subtitle (str, optional): Title for the entire figure.
     """
     if slice_index is None:
         slice_index = B0map.shape[2] // 2  # Default to middle slice
@@ -109,7 +110,7 @@ def visualize_map(B0map, slice_index=None, vmin=-100, vmax=100, subtitle=None):
     # **Colorbar**
     cbar_ax = fig.add_axes([0.88, 0.15, 0.02, 0.7])
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap),
-                 cax=cbar_ax).set_label("B0 Field (Hz)")
+                 cax=cbar_ax).set_label("")
 
     # Title for the entire figure
     plt.suptitle(subtitle)
