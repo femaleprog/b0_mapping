@@ -24,8 +24,8 @@ def get_phantom_mask_from_snr(SNR, thres=None):
                 input("Enter SNR threshold to determine mask (above 1):\n"))
             print("WARNING: generating mask with the specified SNR-threshold")
             while thres != 1:
-                Mask = np.zeros_like(SNR, dtype=bool)
-                Mask[SNR > thres] = True
+                mask = np.zeros_like(SNR, dtype=bool)
+                mask[SNR > thres] = True
                 # plot_3d(Mask)
                 thres = float(
                     input("Is the mask OK ? \n1 = yes. \nEnter new threshold otherwise: \n"))
@@ -33,25 +33,14 @@ def get_phantom_mask_from_snr(SNR, thres=None):
             nvox = int(input("Enter desired number of voxels in mask:\n"))
             print("WARNING: generating mask with the specified number of voxels")
             thres = 10
-            Mask = np.ones_like(SNR, dtype=bool)
-            while np.count_nonzero(Mask) > nvox and thres < 100000:
+            mask = np.ones_like(SNR, dtype=bool)
+            while np.count_nonzero(mask) > nvox and thres < 100000:
                 thres += 1
-                Mask = SNR > thres
+                mask = SNR > thres
             # plot_3d(Mask)
     else:
-        Mask = np.zeros_like(SNR, dtype=bool)
-        Mask[SNR > thres] = True
+        mask = np.zeros_like(SNR, dtype=bool)
+        mask[SNR > thres] = True
         # plot_3d(Mask)
-    '''
-    # Extract connected components
-    labeled_array, num_features = ndi.label(Mask, structure=np.ones((3, 3, 3)))
 
-    if num_features > 1:
-        sizes = np.bincount(labeled_array.ravel())[1:]  # Ignore background
-        max_label = np.argmax(sizes) + 1  # Find the largest component
-        Mask = labeled_array == max_label  # Keep only the largest connected component
-
-    print(
-        f'SNR threshold = {thres}, nb of voxels in Mask = {np.count_nonzero(Mask)}')
-    '''
-    return Mask
+    return mask

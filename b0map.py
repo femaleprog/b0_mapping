@@ -4,10 +4,9 @@ import pydicom as pdcm
 from scipy.ndimage import gaussian_filter
 import scipy.io
 from skimage import restoration as sr
-from visualize_b0map import visualize_map
-from outlier_detection_python import outlier_detection_fieldmap
 from scipy import ndimage
-import get_phantom_mask_from_snr_map as gpm
+import nibabel as nib
+from scipy.ndimage import median_filter
 
 
 def load_dicom_files(folder_path: str) -> list[str]:
@@ -52,6 +51,35 @@ def load_magnitude_from_dicom(folder_path: str) -> np.ndarray:
     return load_pixel_array(dicom_files)
 
 
+def get_phantom_mask_from_snr(SNR, thres=None):
+    if thres is None:
+        option = int(input(
+            "Determine threshold (option 1) or number of voxels in Mask (option 2) ?\n"))
+        if option == 1:
+            thres = float(
+                input("Enter SNR threshold to determine mask (above 1):\n"))
+            print("WARNING: generating mask with the specified SNR-threshold")
+            while thres != 1:
+                mask = np.zeros_like(SNR, dtype=bool)
+                mask[SNR > thres] = True
+                thres = float(
+                    input("Is the mask OK ? \n1 = yes. \nEnter new threshold otherwise: \n"))
+        else:  # Number of voxels in Mask
+            nvox = int(input("Enter desired number of voxels in mask:\n"))
+            print("WARNING: generating mask with the specified number of voxels")
+            thres = 10
+            mask = np.ones_like(SNR, dtype=bool)
+            while np.count_nonzero(mask) > nvox and thres < 100000:
+                thres += 1
+                mask = SNR > thres
+
+    else:
+        mask = np.zeros_like(SNR, dtype=bool)
+        mask[SNR > thres] = True
+
+    return mask
+
+
 def create_mask(magnitude: np.ndarray, mask_type: str) -> np.ndarray:
     """Create a mask based on the specified method."""
     if mask_type == "Matlab":
@@ -64,14 +92,35 @@ def create_mask(magnitude: np.ndarray, mask_type: str) -> np.ndarray:
         threshold = np.percentile(mean_amplitude, 62)
         return smoothed_amplitude > threshold
     elif mask_type == "Phantom":
-        mask = gpm.get_phantom_mask_from_snr(np.sum(magnitude, axis=-1))
+        mask = get_phantom_mask_from_snr(np.sum(magnitude, axis=-1))
         return ndimage.binary_fill_holes(mask)
     else:
         raise ValueError(f"Unknown mask type: {mask_type}")
 
 
 def unwrap_phase_3d(field_map: np.ndarray, dte1: float, dte2: float) -> np.ndarray:
-    """Perform 3D phase unwrapping and calculate B0 map."""
+    """Estimate off-resonance (B0 map) using three echoes instead of two.
+
+    This function calculates the B0 field map by unwrapping the phase difference
+    between the first two echoes and refining the estimate with a third echo.
+    It uses a linear regression over the echo times to improve accuracy compared
+    to a two-echo approach, correcting for phase wraps based on theoretical predictions.
+
+    Parameters
+    ----------
+    field_map : np.ndarray
+        4D array of phase data with shape (nx, ny, nz, num_echoes), where the last
+        dimension contains phase values for three echoes.
+    dte1 : float
+        Time difference between the first and second echo (in seconds).
+    dte2 : float
+        Time difference between the second and third echo (in seconds).
+
+    Returns
+    -------
+    b0_map : np.ndarray
+        3D array representing the B0 field map in Hz, estimated from three-echo data.
+    """
     tau = np.array([0.0, dte1, dte1 + dte2])
     sum_tau, sum_tau2 = np.sum(tau), np.sum(tau * tau)
 
@@ -94,14 +143,78 @@ def unwrap_phase_3d(field_map: np.ndarray, dte1: float, dte2: float) -> np.ndarr
     return np.round((3 * sxy - sum_tau * sy) / (3 * sum_tau2 - sum_tau ** 2))
 
 
+def outlier_detection_fieldmap(B0map, neighsz, thresh):
+    """Detect and filter outliers in a B0 field map using median filtering.
+
+    Parameters
+    ----------
+    B0map : ndarray
+        Input B0 field map array.
+    neighsz : int or tuple of ints
+        Size of the neighborhood for the median filter (e.g., 3 or (3, 3, 3)).
+    thresh : float
+        Threshold for detecting outliers based on absolute difference from filtered map.
+
+    Returns
+    -------
+    outliers : ndarray
+        Boolean array where True indicates an outlier.
+    filtered_B0map : ndarray
+        B0 map after applying the median filter.
+    """
+    filtered_B0map = median_filter(B0map, size=neighsz, mode='reflect')
+    outliers = np.abs(B0map - filtered_B0map) > thresh
+    return outliers, filtered_B0map
+
+
 def load_field_map_from_dicom(
-    folder_path: str, nx: int, ny: int, nz: int, unwrap: str = "3D", mask_type: str = "Phantom"
+    folder_path: str, magnitude_path: str, nx: int, ny: int, nz: int, num_echoes: int = 3, mask_type: str = "Phantom", neighborhood: list = [3, 3, 3], threshold: int = 8
 ) -> np.ndarray:
-    """Load field map from DICOM files and compute B0 map."""
+    """Load field map from DICOM files and compute B0 map.
+
+    This function processes DICOM files to generate a B0 field map, which estimates
+    off-resonance effects using multiple echo times. The number of echoes influences
+    the unwrapping method and accuracy of the off-resonance estimation.
+
+    Parameters
+    ----------
+    folder_path : str
+        Path to the folder containing phase DICOM files.
+    magnitude_path : str
+        Path to the folder containing magnitude DICOM files.
+    nx : int
+        Number of pixels in the x-dimension (rows).
+    ny : int
+        Number of pixels in the y-dimension (columns).
+    nz : int
+        Number of slices in the z-dimension.
+    num_echoes : int, optional
+        Number of echo times used to estimate off-resonance (default is 3).
+        Typically 2 or 3 echoes; 3 allows for more robust estimation, while 2 is
+        simpler but may be less accurate.
+    mask_type : str, optional
+        Type of mask to apply ("Matlab", "Python", or "Phantom"; default is "Phantom").
+
+    Returns
+    -------
+    b0_map_clean : ndarray
+        Cleaned B0 field map array after outlier removal.
+
+    Raises
+    ------
+    ValueError
+        If the unwrap method is unsupported or if echo times cannot be extracted.
+    """
     # Load and preprocess DICOM data
     dicom_files = load_dicom_files(folder_path)
     field_map = load_pixel_array(dicom_files)
-    field_map = (field_map / 4096) * (2 * np.pi) - np.pi  # Convert to radians
+    # Read the first DICOM file to get metadata
+    dcm = pdcm.dcmread(dicom_files[0])
+    # Use Bits Stored to determine the maximum value (e.g., 2^12 = 4096)
+    bits_stored = dcm.BitsStored
+    phase_max = 2 ** bits_stored  # e.g., 4096 for 12 bits
+    field_map = (field_map / phase_max) * (2 * np.pi) - \
+        np.pi  # Convert to radians
 
     # Extract echo times
     te0, te1, te2 = extract_echo_times(dicom_files[0])
@@ -117,30 +230,17 @@ def load_field_map_from_dicom(
     field_map *= mask_expanded
 
     # Calculate B0 map
-    if unwrap == "3D":
+    if num_echoes == 3:
         b0_map = unwrap_phase_3d(field_map, dte1, dte2)
-    elif unwrap == "2D":
+    elif num_echoes == 2:
         diff = field_map[:, :, :, 1] - field_map[:, :, :, 0]
         turns = diff / (2 * np.pi)
         b0_map = (turns + (turns < -0.5) - (turns >= 0.5)) / dte1
     else:
-        raise ValueError(f"Unsupported unwrap method: {unwrap}")
+        raise ValueError(
+            f"Unsupported off resonance estimation method with specified number of echoes: {num_echoes}")
 
-    neighborhood = [3, 3, 3]
-    threshold = 8
     # Clean outliers
     _, b0_map_clean = outlier_detection_fieldmap(
         b0_map, neighborhood, threshold)
     return b0_map_clean
-
-
-if __name__ == "__main__":
-    # Parameters
-    NX, NY, NZ = 256, 256, 64
-    FIELD_MAP_PATH = "/volatile/home/st281428/Downloads/B0Map/_1/P"
-
-    # Compute B0 map
-    b0_map = load_field_map_from_dicom(
-        FIELD_MAP_PATH, NX, NY, NZ, unwrap="3D", mask_type="Phantom")
-    visualize_map(b0_map, slice_index=22, vmin=-600,
-                  vmax=600, subtitle="Cleaned B0map")
