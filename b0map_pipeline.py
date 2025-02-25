@@ -262,7 +262,7 @@ def load_field_map_from_dicom(
 
     # Load magnitude and create mask
     magnitude = load_magnitude_from_dicom(
-        "/volatile/home/st281428/Downloads/B0Map/_1/A")
+        magnitude_path)
     mask = create_mask(magnitude, mask_type)
     mask_expanded = np.repeat(np.expand_dims(mask, axis=-1), 3, axis=-1)
     field_map *= mask_expanded
