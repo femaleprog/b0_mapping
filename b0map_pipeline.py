@@ -127,19 +127,19 @@ def unwrap_phase_3d(field_map: np.ndarray, dte1: float, dte2: float) -> np.ndarr
     diff = field_map[:, :, :, 1] - field_map[:, :, :, 0]
     dunwrapped = sr.unwrap_phase(diff) / (2 * np.pi)
 
-    D = [field_map[:, :, :, 0] / (2 * np.pi), None, None]
-    D[1] = D[0] + dunwrapped
-    D[2] = field_map[:, :, :, 2] / (2 * np.pi)
+    phase_turns = [field_map[:, :, :, 0] / (2 * np.pi), None, None]
+    phase_turns[1] = phase_turns[0] + dunwrapped
+    phase_turns[2] = field_map[:, :, :, 2] / (2 * np.pi)
 
     d2_theoretical = dunwrapped * (dte1 + dte2) / dte1
-    D[2] += np.round(d2_theoretical)
-    eps = (D[2] - D[0]) - d2_theoretical
+    phase_turns[2] += np.round(d2_theoretical)
+    eps = (phase_turns[2] - phase_turns[0]) - d2_theoretical
     D2neg = (eps < -0.5)
     D2pos = (eps >= 0.5)
-    D[2] += D2neg.astype(np.int32) - D2pos.astype(np.int32)
+    phase_turns[2] += D2neg.astype(np.int32) - D2pos.astype(np.int32)
 
-    sxy = tau[1] * D[1] + tau[2] * D[2]
-    sy = D[0] + D[1] + D[2]
+    sxy = tau[1] * phase_turns[1] + tau[2] * phase_turns[2]
+    sy = phase_turns[0] + phase_turns[1] + phase_turns[2]
     return np.round((3 * sxy - sum_tau * sy) / (3 * sum_tau2 - sum_tau ** 2))
 
 
@@ -165,6 +165,44 @@ def outlier_detection_fieldmap(B0map, neighsz, thresh):
     filtered_B0map = median_filter(B0map, size=neighsz, mode='reflect')
     outliers = np.abs(B0map - filtered_B0map) > thresh
     return outliers, filtered_B0map
+
+
+def estimate_b0_from_phase(phase_data: np.ndarray, dte1: float, dte2: float) -> np.ndarray:
+    """Estimate B0 map from pre-loaded phase data across three echoes.
+
+    This function takes a 4D phase array and computes the B0 field map using three
+    echo times, improving off-resonance estimation compared to a two-echo approach.
+
+    Parameters
+    ----------
+    phase_data : np.ndarray
+        4D array of phase data with shape (num_echoes, nx, ny, nz), where num_echoes
+        is typically 3, containing phase values in radians for each echo.
+    dte1 : float
+        Time difference between the first and second echo (in seconds).
+    dte2 : float
+        Time difference between the second and third echo (in seconds).
+
+    Returns
+    -------
+    b0_map : np.ndarray
+        3D array representing the B0 field map in Hz, estimated from the phase data.
+
+    Raises
+    ------
+    ValueError
+        If phase_data does not have exactly 3 echoes.
+    """
+    if phase_data.shape[0] != 3:
+        raise ValueError(
+            "phase_data must have exactly 3 echoes in the first dimension.")
+
+    # Reorder dimensions to match unwrap_phase_3d expectation (nx, ny, nz, num_echoes)
+    field_map = np.moveaxis(phase_data, 0, -1)
+
+    # Call existing 3D unwrapping function
+    b0_map = unwrap_phase_3d(field_map, dte1, dte2)
+    return b0_map
 
 
 def load_field_map_from_dicom(
@@ -231,7 +269,8 @@ def load_field_map_from_dicom(
 
     # Calculate B0 map
     if num_echoes == 3:
-        b0_map = unwrap_phase_3d(field_map, dte1, dte2)
+        b0_map = estimate_b0_from_phase(
+            np.moveaxis(field_map, -1, 0), dte1, dte2)
     elif num_echoes == 2:
         diff = field_map[:, :, :, 1] - field_map[:, :, :, 0]
         turns = diff / (2 * np.pi)

@@ -1,5 +1,5 @@
 # run_b0map.py
-from b0map import load_field_map_from_dicom
+from b0map_pipeline import load_field_map_from_dicom
 from visualize_b0map import visualize_map
 import nibabel as nib
 import numpy as np
@@ -12,7 +12,7 @@ if __name__ == "__main__":
     # Compute B0 map
     b0_map = load_field_map_from_dicom(
         FIELD_MAP_PATH, MAGNITUDE_PATH, NX, NY, NZ,
-        num_echoes=3, mask_type="Phantom", unwrap="3D"
+        num_echoes=3
     )
 
     # Save as NIfTI
