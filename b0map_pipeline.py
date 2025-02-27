@@ -52,6 +52,39 @@ def load_magnitude_from_dicom(folder_path: str) -> np.ndarray:
 
 
 def get_phantom_mask_from_snr(SNR, thres=None):
+    """Generate a binary mask from an SNR array using a threshold or voxel count.
+
+    This function creates a mask to isolate high-SNR regions (e.g., a phantom) from an
+    input Signal-to-Noise Ratio (SNR) array. It supports two modes: a predefined SNR
+    threshold or interactive selection via either an SNR threshold or a target number
+    of voxels. The mask is True where SNR exceeds the threshold.
+
+    Parameters
+    ----------
+    SNR : np.ndarray
+        Input array of Signal-to-Noise Ratio values, typically 2D or 3D, representing
+        the SNR across an MRI volume or slice.
+    thres : float, optional
+        Predefined SNR threshold to generate the mask (default is None). If provided,
+        voxels with SNR > thres are set to True. If None, triggers interactive mode.
+
+    Returns
+    -------
+    mask : np.ndarray
+        Boolean array of the same shape as SNR, where True indicates voxels above the
+        final threshold.
+
+    Notes
+    -----
+    - **Interactive Mode (thres=None)**:
+      - Option 1: Prompts for an SNR threshold, generates a mask, and iterates until
+        the user accepts (enters 1) or adjusts the threshold.
+      - Option 2: Prompts for a desired number of voxels (nvox), then incrementally
+        increases the threshold from 10 until the mask contains nvox voxels or reaches
+        a maximum threshold of 100,000.
+    - The function assumes higher SNR values indicate the region of interest (e.g.,
+      a phantom in MRI data).
+    """
     if thres is None:
         option = int(input(
             "Determine threshold (option 1) or number of voxels in Mask (option 2) ?\n"))
@@ -72,7 +105,6 @@ def get_phantom_mask_from_snr(SNR, thres=None):
             while np.count_nonzero(mask) > nvox and thres < 100000:
                 thres += 1
                 mask = SNR > thres
-
     else:
         mask = np.zeros_like(SNR, dtype=bool)
         mask[SNR > thres] = True
