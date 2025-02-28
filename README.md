@@ -37,7 +37,7 @@ This project is in its early stages, focusing on faithfully translating the Matl
 
 ### Prerequisites
 - Python 3.x
-- Libraries: (To be specified as the project develops—e.g., NumPy, Matplotlib, etc.)
+- Libraries: NumPy, Matplotlib, etc...
 
 ### Installation
 1. Clone the repository:
@@ -50,7 +50,7 @@ This project is in its early stages, focusing on faithfully translating the Matl
 
 3. Run the translated Python Script:
    ```bash
-   python python_code.py
+   python b0map_pipeline.py
 
 ## Conributing
 We welcome contributions from the community! Whether you’re a neuroscientist, a Python developer, or just passionate about improving research tools, feel free to:
