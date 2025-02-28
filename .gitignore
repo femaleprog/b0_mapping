@@ -1,0 +1,19 @@
+# Ignore Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+B0/
+.nii
+# Ignore environment files
+.env
+venv/
+pipeline_env/
+# Ignore logs
+*.log
+
+# Ignore IDE files
+.vscode/
+.idea/
+
+# tests
+tests/
